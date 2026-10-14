@@ -20,10 +20,17 @@ package org.oxycblt.auxio.home.tabs
 
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator.TabConfigurationStrategy
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.MusicType
 
 class NamedTabStrategy(private val homeTabs: List<MusicType>) : TabConfigurationStrategy {
     override fun onConfigureTab(tab: TabLayout.Tab, position: Int) {
-        tab.setText(homeTabs[position].nameRes)
+        if (position < homeTabs.size) {
+            tab.setText(homeTabs[position].nameRes)
+        } else if (position == homeTabs.size) {
+            tab.setText(R.string.lbl_spotiflac)
+        } else {
+            tab.setText(R.string.lbl_usb_dac)
+        }
     }
 }

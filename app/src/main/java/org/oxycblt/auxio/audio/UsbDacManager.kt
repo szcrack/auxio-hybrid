@@ -13,13 +13,21 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.util.Log
 import com.truesample.usbaudio.NativeBridge
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.nio.ByteBuffer
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Manages USB DAC detection, direct connection, and hardware audio streaming
  * via TrueSample's native driver (libusbaudio.so).
  */
-class UsbDacManager(private val context: Context) {
+@Singleton
+class UsbDacManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
     private var usbConnection: UsbDeviceConnection? = null
@@ -31,6 +39,12 @@ class UsbDacManager(private val context: Context) {
 
     var currentDeviceName: String? = null
         private set
+
+    private val _dacConnectedFlow = MutableStateFlow(false)
+    val dacConnectedFlow: StateFlow<Boolean> = _dacConnectedFlow
+
+    private val _deviceNameFlow = MutableStateFlow<String?>(null)
+    val deviceNameFlow: StateFlow<String?> = _deviceNameFlow
 
     private var onDacStateChangedListener: ((Boolean, String?) -> Unit)? = null
 
@@ -159,6 +173,8 @@ class UsbDacManager(private val context: Context) {
             if (nativeHandle != 0L) {
                 isDacConnected = true
                 currentDeviceName = device.productName ?: device.deviceName
+                _dacConnectedFlow.value = true
+                _deviceNameFlow.value = currentDeviceName
                 Log.i(TAG, "TrueSample USB Driver successfully bound! Handle: $nativeHandle")
                 onDacStateChangedListener?.invoke(true, currentDeviceName)
             } else {
@@ -226,6 +242,8 @@ class UsbDacManager(private val context: Context) {
         val wasConnected = isDacConnected
         isDacConnected = false
         currentDeviceName = null
+        _dacConnectedFlow.value = false
+        _deviceNameFlow.value = null
         if (wasConnected) {
             onDacStateChangedListener?.invoke(false, null)
         }

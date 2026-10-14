@@ -496,4 +496,27 @@
         <item quantity="one">%d second</item>
         <item quantity="other">%d seconds</item>
     </plurals>
+
+    <!-- Hybrid: SpotiFLAC & TrueSample DAC Engine -->
+    <string name="lbl_spotiflac">SpotiFLAC</string>
+    <string name="lbl_spotiflac_desc">Búsqueda y descarga de archivos FLAC sin pérdida</string>
+    <string name="lbl_spotiflac_search_hint">Buscar canciones, álbumes o artistas...</string>
+    <string name="lbl_spotiflac_download">Descargar FLAC</string>
+    <string name="lbl_spotiflac_downloading">Descargando pista...</string>
+    <string name="lbl_spotiflac_complete">Descarga lista e indexada en la biblioteca</string>
+    <string name="lbl_spotiflac_hires">Hi-Res FLAC</string>
+    <string name="lbl_spotiflac_lossless">16-bit / 44.1kHz</string>
+    <string name="lbl_spotiflac_empty">Busca canciones para descargar en formato FLAC auténtico.</string>
+    <string name="lbl_spotiflac_error">Error al buscar o descargar la pista</string>
+
+    <string name="lbl_usb_dac">DAC USB</string>
+    <string name="lbl_usb_dac_title">Motor USB DAC Bit-Perfect</string>
+    <string name="lbl_dac_status_connected">DAC USB Conectado</string>
+    <string name="lbl_dac_status_disconnected">Ningún DAC USB Conectado</string>
+    <string name="lbl_dac_bitperfect_active">Bypass AudioFlinger 48kHz Activo (Streaming directo UAC2)</string>
+    <string name="lbl_dac_standard_active">Usando salida del sistema Android (Altavoces / 3.5mm / BT)</string>
+    <string name="lbl_dac_scan">Detectar DAC USB</string>
+    <string name="lbl_dac_hardware_vol">Volumen de Hardware (DAC Directo)</string>
+    <string name="lbl_dac_specs_title">Resolución y Formato de Salida</string>
+    <string name="lbl_dac_specs_desc">UAC2 Nativo: Soporte 16-bit, 24-bit y 32-bit Float (44.1kHz hasta 384kHz)</string>
 </resources>

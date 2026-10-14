@@ -13,13 +13,20 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
+
 /**
  * SpotiFLAC downloader client:
  * Resolves lossless FLAC streams (16-bit / 24-bit) from hi-fi sources,
  * downloads them directly into the device's Music folder,
  * and notifies Android's MediaScanner so Auxio indexes them immediately.
  */
-class SpotiFlacDownloader(private val context: Context) {
+@Singleton
+class SpotiFlacDownloader @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     companion object {
         private const val TAG = "SpotiFlacDownloader"

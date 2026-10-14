@@ -9,6 +9,18 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_spotiflac"
+        android:icon="@drawable/ic_download_24"
+        android:title="@string/lbl_spotiflac"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_usb_dac"
+        android:icon="@drawable/ic_usb_dac_24"
+        android:title="@string/lbl_usb_dac"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_sort"
         android:icon="@drawable/ic_sort_24"
         android:title="@string/lbl_sort"

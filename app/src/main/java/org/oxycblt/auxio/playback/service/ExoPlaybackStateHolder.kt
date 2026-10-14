@@ -76,6 +76,7 @@ class ExoPlaybackStateHolder(
     private val replayGainProcessor: ReplayGainAudioProcessor,
     private val musicRepository: MusicRepository,
     private val imageSettings: ImageSettings,
+    private val usbDacManager: org.oxycblt.auxio.audio.UsbDacManager,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -98,6 +99,7 @@ class ExoPlaybackStateHolder(
         replayGainProcessor.attach()
         playbackSettings.registerListener(this)
         imageSettings.registerListener(this)
+        usbDacManager.init()
     }
 
     fun release() {
@@ -108,6 +110,7 @@ class ExoPlaybackStateHolder(
         replayGainProcessor.release()
         imageSettings.unregisterListener(this)
         playbackSettings.unregisterListener(this)
+        usbDacManager.release()
         player.release()
     }
 
@@ -653,10 +656,16 @@ class ExoPlaybackStateHolder(
         private val replayGainProcessor: ReplayGainAudioProcessor,
         private val musicRepository: MusicRepository,
         private val imageSettings: ImageSettings,
+        private val usbDacManager: org.oxycblt.auxio.audio.UsbDacManager,
     ) {
         fun create(): ExoPlaybackStateHolder {
             // Since Auxio is a music player, only specify an audio renderer to save
             // battery/apk size/cache size]
+            val defaultSink = DefaultAudioSink.Builder(context)
+                .setAudioProcessors(arrayOf(replayGainProcessor))
+                .build()
+            val hybridSink = org.oxycblt.auxio.audio.HybridAudioSink(usbDacManager, defaultSink)
+
             val audioRenderer = RenderersFactory { handler, _, audioListener, _, _ ->
                 arrayOf<BaseRenderer>(
                     MediaCodecAudioRenderer(
@@ -664,9 +673,7 @@ class ExoPlaybackStateHolder(
                         MediaCodecSelector.DEFAULT,
                         handler,
                         audioListener,
-                        DefaultAudioSink.Builder(context)
-                            .setAudioProcessors(arrayOf(replayGainProcessor))
-                            .build(),
+                        hybridSink,
                     ),
                 )
             }
@@ -696,6 +703,7 @@ class ExoPlaybackStateHolder(
                 replayGainProcessor,
                 musicRepository,
                 imageSettings,
+                usbDacManager,
             )
         }
     }

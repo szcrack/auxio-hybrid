@@ -153,7 +153,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             // limit to the maximum amount possible. This will prevent the tab ripple from
             // bugging out due to dynamically inflating each fragment, at the cost of slower
             // debug UI performance.
-            offscreenPageLimit = Tab.MAX_SEQUENCE_IDX + 1
+            offscreenPageLimit = Tab.MAX_SEQUENCE_IDX + 3
 
             dampen()
         }
@@ -191,6 +191,16 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             R.id.action_search -> {
                 L.d("Navigating to search")
                 findNavController().navigateSafe(HomeFragmentDirections.search())
+                true
+            }
+            R.id.action_spotiflac -> {
+                L.d("Selecting SpotiFLAC tab")
+                requireBinding().homePager.currentItem = homeModel.currentTabTypes.size
+                true
+            }
+            R.id.action_usb_dac -> {
+                L.d("Selecting USB DAC tab")
+                requireBinding().homePager.currentItem = homeModel.currentTabTypes.size + 1
                 true
             }
             R.id.action_settings -> {
@@ -479,15 +489,21 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         fragmentManager: FragmentManager,
         lifecycleOwner: LifecycleOwner,
     ) : FragmentStateAdapter(fragmentManager, lifecycleOwner.lifecycle) {
-        override fun getItemCount() = tabs.size
+        override fun getItemCount() = tabs.size + 2
 
         override fun createFragment(position: Int): Fragment =
-            when (tabs[position]) {
-                MusicType.SONGS -> SongListFragment()
-                MusicType.ALBUMS -> AlbumListFragment()
-                MusicType.ARTISTS -> ArtistListFragment()
-                MusicType.GENRES -> GenreListFragment()
-                MusicType.PLAYLISTS -> PlaylistListFragment()
+            if (position < tabs.size) {
+                when (tabs[position]) {
+                    MusicType.SONGS -> SongListFragment()
+                    MusicType.ALBUMS -> AlbumListFragment()
+                    MusicType.ARTISTS -> ArtistListFragment()
+                    MusicType.GENRES -> GenreListFragment()
+                    MusicType.PLAYLISTS -> PlaylistListFragment()
+                }
+            } else if (position == tabs.size) {
+                org.oxycblt.auxio.downloader.SpotiFlacFragment()
+            } else {
+                org.oxycblt.auxio.audio.UsbDacFragment()
             }
     }
 }

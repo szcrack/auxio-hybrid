@@ -90,6 +90,12 @@
         <action
             android:id="@+id/choose_locations"
             app:destination="@id/music_locations_dialog" />
+        <action
+            android:id="@+id/spotiflac"
+            app:destination="@id/spotiflac_fragment" />
+        <action
+            android:id="@+id/usb_dac"
+            app:destination="@id/usbdac_fragment" />
     </fragment>
 
     <dialog
@@ -573,4 +579,16 @@
         android:name="org.oxycblt.auxio.music.locations.LocationsDialog"
         android:label="music_locations_dialog"
         tools:layout="@layout/dialog_music_locations" />
+
+    <fragment
+        android:id="@+id/spotiflac_fragment"
+        android:name="org.oxycblt.auxio.downloader.SpotiFlacFragment"
+        android:label="spotiflac_fragment"
+        tools:layout="@layout/fragment_spotiflac" />
+
+    <fragment
+        android:id="@+id/usbdac_fragment"
+        android:name="org.oxycblt.auxio.audio.UsbDacFragment"
+        android:label="usbdac_fragment"
+        tools:layout="@layout/fragment_usb_dac" />
 </navigation>
