@@ -109,11 +109,11 @@ class HybridAudioSink(
         }
     }
 
-    override fun playToEnd() {
+    override fun playToEndOfStream() {
         if (isUsingDac) {
             usbDacManager.stopPlayback()
         } else {
-            defaultSink.playToEnd()
+            defaultSink.playToEndOfStream()
         }
     }
 
@@ -163,8 +163,12 @@ class HybridAudioSink(
         defaultSink.setAuxEffectInfo(auxEffectInfo)
     }
 
-    override fun enableTunneling() {
-        defaultSink.enableTunneling()
+    override fun getAudioTrackBufferSizeUs(): Long {
+        return defaultSink.audioTrackBufferSizeUs
+    }
+
+    override fun enableTunnelingV21() {
+        defaultSink.enableTunnelingV21()
     }
 
     override fun disableTunneling() {
