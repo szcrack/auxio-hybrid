@@ -30,23 +30,33 @@ class DeezerProvider @Inject constructor(
     companion object {
         private const val TAG = "DeezerProvider"
         private const val API = "https://api.deezer.com"
-        private const val UA = "Mozilla/5.0 (Android)"
+        private const val UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
     }
 
     override suspend fun search(query: String): Result<List<SpotiFlacDownloader.TrackMeta>> {
         return try {
-            val encoded = URLEncoder.encode(query, "UTF-8")
+            val encoded = URLEncoder.encode(query.trim(), "UTF-8")
             val url = URL("$API/search?q=$encoded&limit=25&output=json")
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("User-Agent", UA)
-                connectTimeout = 10000
-                readTimeout = 10000
+                setRequestProperty("Accept", "application/json")
+                connectTimeout = 12000
+                readTimeout = 12000
             }
             if (conn.responseCode != 200) {
-                return Result.failure(Exception("Deezer HTTP ${conn.responseCode}"))
+                return Result.failure(Exception("Deezer respondio HTTP ${conn.responseCode}"))
             }
-            val json = JSONObject(conn.inputStream.bufferedReader().readText())
+
+            val rawJson = conn.inputStream.bufferedReader().readText()
+            val json = JSONObject(rawJson)
+
+            if (json.has("error")) {
+                val errObj = json.optJSONObject("error")
+                val errMsg = errObj?.optString("message", "Error en la API de Deezer") ?: "Error en Deezer"
+                return Result.failure(Exception(errMsg))
+            }
+
             val items = json.optJSONArray("data") ?: return Result.success(emptyList())
 
             val list = mutableListOf<SpotiFlacDownloader.TrackMeta>()
@@ -55,6 +65,7 @@ class DeezerProvider @Inject constructor(
                 val album = item.optJSONObject("album")
                 val artist = item.optJSONObject("artist")
                 val preview = item.optString("preview", "")
+
                 list.add(SpotiFlacDownloader.TrackMeta(
                     id = item.optLong("id", 0L),
                     title = item.optString("title", "?"),
@@ -72,7 +83,8 @@ class DeezerProvider @Inject constructor(
             Result.success(list)
         } catch (e: Exception) {
             Log.e(TAG, "Error en busqueda Deezer", e)
-            Result.failure(e)
+            val msg = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+            Result.failure(Exception("Deezer: $msg"))
         }
     }
 }
