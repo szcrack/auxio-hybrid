@@ -1,80 +1,103 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="?attr/colorSurface">
+    android:padding="16dp">
 
+    <!-- Selector de proveedor -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingTop="@dimen/spacing_medium"
-        android:paddingBottom="@dimen/spacing_small">
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/search_layout"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chip_provider"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Deezer"
+            style="@style/Widget.Material3.Chip.Filter"
+            app:chipIcon="@drawable/ic_album_24"
+            android:layout_marginEnd="8dp"/>
+
+        <TextView
+            android:id="@+id/txt_provider_desc"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="@string/lbl_spotiflac_search_hint"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp"
-            app:startIconDrawable="@drawable/ic_search_24">
+            android:textSize="11sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:text="30M canciones | Preview gratis"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_arl"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ARL"
+            android:textSize="11sp"
+            style="@style/Widget.Material3.Button.OutlinedButton"/>
+    </LinearLayout>
+
+    <!-- Barra de busqueda -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/search_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:hint="Buscar canciones..."
                 android:imeOptions="actionSearch"
-                android:inputType="text"
-                android:maxLines="1" />
-
+                android:inputType="text"/>
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_search"
-            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_marginStart="@dimen/spacing_small"
-            android:text="@string/lbl_search" />
-
+            android:layout_height="wrap_content"
+            android:text="Buscar"
+            style="@style/Widget.Material3.Button"/>
     </LinearLayout>
 
-    <com.google.android.material.progressindicator.LinearProgressIndicator
+    <!-- Progress -->
+    <ProgressBar
         android:id="@+id/search_progress"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:indeterminate="true"
+        android:layout_gravity="center"
         android:visibility="gone"
-        tools:visibility="visible" />
+        style="?android:attr/progressBarStyleLarge"/>
 
+    <!-- Mensaje vacio / error -->
     <TextView
         android:id="@+id/empty_text"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:gravity="center"
-        android:padding="@dimen/spacing_large"
-        android:text="@string/lbl_spotiflac_empty"
-        android:textAppearance="?attr/textAppearanceBodyLarge"
-        android:textColor="?attr/colorOnSurfaceVariant" />
+        android:padding="24dp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone"/>
 
+    <!-- Lista de resultados -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_tracks"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingBottom="@dimen/spacing_large"
-        android:visibility="gone"
-        tools:listitem="@layout/item_spotiflac_track" />
+        android:visibility="gone"/>
 
 </LinearLayout>
