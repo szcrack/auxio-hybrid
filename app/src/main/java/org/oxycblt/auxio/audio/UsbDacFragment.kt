@@ -24,36 +24,49 @@ class UsbDacFragment : ViewBindingFragment<FragmentUsbDacBinding>() {
     override fun onBindingCreated(binding: FragmentUsbDacBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
 
-        // Observe DAC connection state in real time
-        viewLifecycleOwner.lifecycleScope.launch {
-            usbDacManager.dacConnectedFlow.collectLatest { isConnected ->
-                updateDacState(binding, isConnected, usbDacManager.currentDeviceName)
-            }
-        }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            usbDacManager.deviceNameFlow.collectLatest { name ->
-                if (usbDacManager.isDacConnected) {
-                    binding.txtDeviceName.text = name ?: "Dispositivo USB Audio Class 2"
+        try {
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    usbDacManager.dacConnectedFlow.collectLatest { isConnected ->
+                        updateDacState(binding, isConnected, usbDacManager.currentDeviceName)
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.e("UsbDacFragment", "dacConnectedFlow error", e)
                 }
             }
-        }
-
-        binding.btnScanDac.setOnClickListener {
-            Toast.makeText(requireContext(), "Buscando DAC USB conectado...", Toast.LENGTH_SHORT).show()
-            usbDacManager.scanForConnectedDac()
-        }
-
-        binding.seekHardwareVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    binding.txtVolumeLabel.text = "${getString(R.string.lbl_dac_hardware_vol)}: $progress%"
-                    usbDacManager.setHardwareVolume(progress)
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    usbDacManager.deviceNameFlow.collectLatest { name ->
+                        if (usbDacManager.isDacConnected) {
+                            binding.txtDeviceName.text = name ?: "Dispositivo USB Audio Class 2"
+                        }
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.e("UsbDacFragment", "deviceNameFlow error", e)
                 }
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+            binding.btnScanDac.setOnClickListener {
+                Toast.makeText(requireContext(), "Buscando DAC USB conectado...", Toast.LENGTH_SHORT).show()
+                try { usbDacManager.scanForConnectedDac() } catch (e: Throwable) {
+                    android.util.Log.e("UsbDacFragment", "scanForConnectedDac error", e)
+                }
+            }
+            binding.seekHardwareVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        binding.txtVolumeLabel.text = "${getString(R.string.lbl_dac_hardware_vol)}: $progress%"
+                        try { usbDacManager.setHardwareVolume(progress) } catch (e: Throwable) {
+                            android.util.Log.e("UsbDacFragment", "setHardwareVolume error", e)
+                        }
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        } catch (e: Throwable) {
+            android.util.Log.e("UsbDacFragment", "onBindingCreated failed", e)
+            binding.txtStatusTitle.text = "Error al inicializar: ${e.localizedMessage}"
+        }
     }
 
     private fun updateDacState(binding: FragmentUsbDacBinding, isConnected: Boolean, deviceName: String?) {
