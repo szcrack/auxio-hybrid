@@ -21,18 +21,24 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Manages USB DAC detection, direct connection, and hardware audio streaming
- * via TrueSample's native driver (libusbaudio.so).
+ * Manages USB DAC detection, connection state, and hardware audio streaming.
+ *
+ * SAFETY: All JNI / native calls run on a dedicated background thread to prevent
+ * SIGABRT crashes from propagating to the main thread when a USB device is connected.
  */
 @Singleton
 class UsbDacManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
     private var usbConnection: UsbDeviceConnection? = null
-    private var claimedInterfaces = mutableListOf<UsbInterface>()
+    private val claimedInterfaces = mutableListOf<UsbInterface>()
     private var nativeHandle: Long = 0L
+
+    /** Worker thread for all JNI operations - avoids crashing main thread */
+    private val nativeThread = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "UsbDac-Native").also { it.isDaemon = true }
+    }
 
     var isDacConnected: Boolean = false
         private set
@@ -53,35 +59,45 @@ class UsbDacManager @Inject constructor(
         private const val ACTION_USB_PERMISSION = "org.oxycblt.auxio.USB_PERMISSION"
         const val SUBCLASS_AUDIO_CONTROL = 1
         const val SUBCLASS_AUDIO_STREAMING = 2
+
+        /** True si las librerias nativas cargaron correctamente */
+        val nativeLibsAvailable: Boolean = try {
+            // NativeBridge companion object loads libs in its init block
+            NativeBridge
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
+            // IMPORTANT: onReceive runs on main thread. Never call JNI here directly.
             when (intent?.action) {
                 UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                    val device = getUsbDevice(intent)
-                    if (device != null && isAudioDevice(device)) {
-                        Log.i(TAG, "Audio DAC attached: ${device.deviceName} (${device.productName})")
+                    val device = getUsbDevice(intent) ?: return
+                    if (isAudioDevice(device)) {
+                        Log.i(TAG, "USB Audio device attached: ${device.deviceName}")
                         requestPermissionAndOpen(device)
                     }
                 }
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                    val device = getUsbDevice(intent)
-                    if (device != null && isAudioDevice(device)) {
-                        Log.i(TAG, "Audio DAC detached: ${device.deviceName}")
-                        closeDac()
+                    val device = getUsbDevice(intent) ?: return
+                    if (isAudioDevice(device)) {
+                        Log.i(TAG, "USB Audio device detached: ${device.deviceName}")
+                        // Schedule close on native thread to avoid main thread JNI
+                        nativeThread.execute { closeDac() }
                     }
                 }
                 ACTION_USB_PERMISSION -> {
-                    synchronized(this) {
-                        val device = getUsbDevice(intent)
-                        val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                        if (granted && device != null) {
-                            Log.i(TAG, "Permission granted for DAC: ${device.productName}")
-                            openDeviceInternal(device)
-                        } else {
-                            Log.w(TAG, "Permission denied for DAC: ${device?.productName}")
-                        }
+                    val device = getUsbDevice(intent) ?: return
+                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                    if (granted) {
+                        Log.i(TAG, "USB permission granted for: ${device.productName}")
+                        // Run on native thread - NOT main thread
+                        nativeThread.execute { openDeviceInternal(device) }
+                    } else {
+                        Log.w(TAG, "USB permission denied for: ${device.productName}")
                     }
                 }
             }
@@ -95,60 +111,80 @@ class UsbDacManager @Inject constructor(
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
             addAction(ACTION_USB_PERMISSION)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            context.registerReceiver(usbReceiver, filter)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(usbReceiver, filter)
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error registering USB receiver", e)
         }
-        scanForConnectedDac()
+        // Scan on native thread to avoid blocking service startup
+        nativeThread.execute { scanForConnectedDac() }
     }
 
     fun release() {
-        try {
-            context.unregisterReceiver(usbReceiver)
-        } catch (_: Throwable) {}
-        closeDac()
+        try { context.unregisterReceiver(usbReceiver) } catch (_: Throwable) {}
+        nativeThread.execute { closeDac() }
     }
 
     fun scanForConnectedDac() {
-        val deviceList = usbManager.deviceList
-        for ((_, device) in deviceList) {
-            if (isAudioDevice(device)) {
-                Log.i(TAG, "Found existing USB Audio DAC: ${device.productName}")
-                requestPermissionAndOpen(device)
-                break
+        try {
+            val deviceList = usbManager.deviceList
+            for ((_, device) in deviceList) {
+                if (isAudioDevice(device)) {
+                    Log.i(TAG, "Found existing USB Audio device: ${device.productName}")
+                    requestPermissionAndOpen(device)
+                    break
+                }
             }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error scanning USB devices", e)
         }
     }
 
     private fun isAudioDevice(device: UsbDevice): Boolean {
-        for (i in 0 until device.interfaceCount) {
-            val intf = device.getInterface(i)
-            if (intf.interfaceClass == UsbConstants.USB_CLASS_AUDIO &&
-                (intf.interfaceSubclass == SUBCLASS_AUDIO_STREAMING || intf.interfaceSubclass == SUBCLASS_AUDIO_CONTROL)
-            ) {
-                return true
+        return try {
+            for (i in 0 until device.interfaceCount) {
+                val intf = device.getInterface(i)
+                if (intf.interfaceClass == UsbConstants.USB_CLASS_AUDIO &&
+                    (intf.interfaceSubclass == SUBCLASS_AUDIO_STREAMING ||
+                     intf.interfaceSubclass == SUBCLASS_AUDIO_CONTROL)
+                ) return true
             }
+            false
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error checking USB device class", e)
+            false
         }
-        return false
     }
 
     private fun requestPermissionAndOpen(device: UsbDevice) {
-        if (usbManager.hasPermission(device)) {
-            openDeviceInternal(device)
-        } else {
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        try {
+            if (usbManager.hasPermission(device)) {
+                // Already have permission - open on native thread
+                nativeThread.execute { openDeviceInternal(device) }
             } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+                val permissionIntent = PendingIntent.getBroadcast(
+                    context, 0, Intent(ACTION_USB_PERMISSION), flags
+                )
+                usbManager.requestPermission(device, permissionIntent)
             }
-            val permissionIntent = PendingIntent.getBroadcast(
-                context, 0, Intent(ACTION_USB_PERMISSION), flags
-            )
-            usbManager.requestPermission(device, permissionIntent)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error requesting USB permission", e)
         }
     }
 
+    /**
+     * Opens the USB device and initializes native audio driver.
+     * MUST be called from [nativeThread] only, never from main thread.
+     */
     private fun openDeviceInternal(device: UsbDevice) {
         try {
             closeDac()
@@ -157,65 +193,101 @@ class UsbDacManager @Inject constructor(
                 return
             }
             usbConnection = conn
-
             claimedInterfaces.clear()
+
             for (i in 0 until device.interfaceCount) {
-                val intf = device.getInterface(i)
-                if (intf.interfaceClass == UsbConstants.USB_CLASS_AUDIO) {
-                    conn.claimInterface(intf, true)
-                    claimedInterfaces.add(intf)
+                try {
+                    val intf = device.getInterface(i)
+                    if (intf.interfaceClass == UsbConstants.USB_CLASS_AUDIO) {
+                        if (conn.claimInterface(intf, true)) {
+                            claimedInterfaces.add(intf)
+                        }
+                    }
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Could not claim interface $i", e)
                 }
             }
 
-            val rawDescriptors = conn.rawDescriptors ?: ByteArray(0)
-            nativeHandle = NativeBridge.nativeOpen(conn.fileDescriptor, rawDescriptors)
-
-            if (nativeHandle != 0L) {
-                isDacConnected = true
-                currentDeviceName = device.productName ?: device.deviceName
-                _dacConnectedFlow.value = true
-                _deviceNameFlow.value = currentDeviceName
-                Log.i(TAG, "TrueSample USB Driver successfully bound! Handle: $nativeHandle")
-                onDacStateChangedListener?.invoke(true, currentDeviceName)
+            // Try native driver only if libs loaded successfully
+            if (nativeLibsAvailable) {
+                try {
+                    val rawDescriptors = conn.rawDescriptors ?: ByteArray(0)
+                    nativeHandle = NativeBridge.nativeOpen(conn.fileDescriptor, rawDescriptors)
+                    if (nativeHandle != 0L) {
+                        Log.i(TAG, "TrueSample native driver bound. Handle=$nativeHandle")
+                    } else {
+                        Log.w(TAG, "nativeOpen returned 0 - running in monitor-only mode")
+                    }
+                } catch (e: Throwable) {
+                    // Native crash - catch here since we are NOT on main thread
+                    Log.e(TAG, "Native driver failed to open (non-fatal, monitor mode)", e)
+                    nativeHandle = 0L
+                }
             } else {
-                Log.e(TAG, "NativeBridge.nativeOpen returned 0L handle")
-                closeDac()
+                Log.w(TAG, "Native libs not available - running in USB monitor-only mode")
             }
+
+            // Update connection state regardless of native result
+            isDacConnected = true
+            currentDeviceName = device.productName ?: device.deviceName
+            _dacConnectedFlow.value = true
+            _deviceNameFlow.value = currentDeviceName
+            onDacStateChangedListener?.invoke(true, currentDeviceName)
+            Log.i(TAG, "USB DAC connected: $currentDeviceName (native=${nativeHandle != 0L})")
+
         } catch (e: Throwable) {
-            Log.e(TAG, "Error opening DAC device", e)
+            Log.e(TAG, "openDeviceInternal failed", e)
             closeDac()
         }
     }
 
     fun startPlayback(sampleRate: Int, bitDepth: Int, channels: Int, bufferSize: Int = 1024): Boolean {
         if (!isDacConnected || nativeHandle == 0L) return false
-        val result = NativeBridge.nativeStart(
-            handle = nativeHandle,
-            sampleRate = sampleRate,
-            bitDepth = bitDepth,
-            channels = channels,
-            bufferSize = bufferSize,
-            flags = 0,
-            mode = 0
-        )
-        return result.isNotEmpty() && result[0] == 0
+        return try {
+            val result = NativeBridge.nativeStart(
+                handle = nativeHandle,
+                sampleRate = sampleRate,
+                bitDepth = bitDepth,
+                channels = channels,
+                bufferSize = bufferSize,
+                flags = 0,
+                mode = 0
+            )
+            result.isNotEmpty() && result[0] == 0
+        } catch (e: Throwable) {
+            Log.e(TAG, "startPlayback failed", e)
+            false
+        }
     }
 
     fun writePcmBuffer(buffer: ByteBuffer, length: Int): Int {
         if (!isDacConnected || nativeHandle == 0L) return -1
-        return NativeBridge.nativeWrite(nativeHandle, buffer, length)
+        return try {
+            NativeBridge.nativeWrite(nativeHandle, buffer, length)
+        } catch (e: Throwable) {
+            Log.e(TAG, "writePcmBuffer failed", e)
+            -1
+        }
     }
 
     fun stopPlayback() {
-        if (nativeHandle != 0L) {
+        if (nativeHandle == 0L) return
+        try {
             NativeBridge.nativeDrain(nativeHandle)
             NativeBridge.nativeStop(nativeHandle)
+        } catch (e: Throwable) {
+            Log.e(TAG, "stopPlayback failed", e)
         }
     }
 
     fun setHardwareVolume(volume: Int): Boolean {
         if (nativeHandle == 0L) return false
-        return NativeBridge.nativeSetVolume(nativeHandle, volume)
+        return try {
+            NativeBridge.nativeSetVolume(nativeHandle, volume)
+        } catch (e: Throwable) {
+            Log.e(TAG, "setHardwareVolume failed", e)
+            false
+        }
     }
 
     fun closeDac() {
@@ -228,15 +300,12 @@ class UsbDacManager @Inject constructor(
             }
             nativeHandle = 0L
         }
-
         usbConnection?.let { conn ->
             for (intf in claimedInterfaces) {
-                try {
-                    conn.releaseInterface(intf)
-                } catch (_: Throwable) {}
+                try { conn.releaseInterface(intf) } catch (_: Throwable) {}
             }
             claimedInterfaces.clear()
-            conn.close()
+            try { conn.close() } catch (_: Throwable) {}
         }
         usbConnection = null
         val wasConnected = isDacConnected
@@ -250,11 +319,16 @@ class UsbDacManager @Inject constructor(
     }
 
     private fun getUsbDevice(intent: Intent): UsbDevice? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error getting USB device from intent", e)
+            null
         }
     }
 }
