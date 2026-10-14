@@ -45,7 +45,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew app:assembleDebug --stacktrace
+        run: ./gradlew app:packageDebug -x :media:lib-decoder-ffmpeg:assembleFfmpeg --stacktrace
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
