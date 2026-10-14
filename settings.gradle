@@ -1,0 +1,26 @@
+pluginManagement {
+    includeBuild('media/build-logic-settings')
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+    id 'gradlebuild.media3-settings-logic'
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+includeMedia3.execute(file('media'))
+
+rootProject.name = "Auxio"
+include ':app'
+include ':musikr'
