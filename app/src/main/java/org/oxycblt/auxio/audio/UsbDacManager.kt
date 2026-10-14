@@ -106,7 +106,7 @@ class UsbDacManager @Inject constructor(
     fun release() {
         try {
             context.unregisterReceiver(usbReceiver)
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
         closeDac()
     }
 
@@ -181,7 +181,7 @@ class UsbDacManager @Inject constructor(
                 Log.e(TAG, "NativeBridge.nativeOpen returned 0L handle")
                 closeDac()
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "Error opening DAC device", e)
             closeDac()
         }
@@ -223,7 +223,7 @@ class UsbDacManager @Inject constructor(
             try {
                 NativeBridge.nativeStop(nativeHandle)
                 NativeBridge.nativeClose(nativeHandle)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Error closing native handle", e)
             }
             nativeHandle = 0L
@@ -233,7 +233,7 @@ class UsbDacManager @Inject constructor(
             for (intf in claimedInterfaces) {
                 try {
                     conn.releaseInterface(intf)
-                } catch (_: Exception) {}
+                } catch (_: Throwable) {}
             }
             claimedInterfaces.clear()
             conn.close()

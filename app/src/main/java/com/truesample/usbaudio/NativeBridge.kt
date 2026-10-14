@@ -12,7 +12,7 @@ object NativeBridge {
             System.loadLibrary("usb-1.0")
             System.loadLibrary("decoder")
             System.loadLibrary("usbaudio")
-        } catch (e: UnsatisfiedLinkError) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }

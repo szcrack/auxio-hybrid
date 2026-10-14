@@ -139,7 +139,11 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             registerOnPageChangeCallback(
                 object : ViewPager2.OnPageChangeCallback() {
                     override fun onPageSelected(position: Int) {
-                        homeModel.synchronizeTabPosition(position)
+                        val isLibraryTab = position in homeModel.currentTabTypes.indices
+                        binding.homeNormalToolbar.menu.findItem(R.id.action_sort)?.isVisible = isLibraryTab
+                        if (isLibraryTab) {
+                            homeModel.synchronizeTabPosition(position)
+                        }
                     }
                 }
             )
