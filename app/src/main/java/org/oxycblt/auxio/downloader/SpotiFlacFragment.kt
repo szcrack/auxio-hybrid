@@ -10,7 +10,6 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
@@ -103,22 +102,15 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
         inner class ViewHolder(private val binding: ItemSpotiflacTrackBinding) : RecyclerView.ViewHolder(binding.root) {
             fun bind(track: SpotiFlacDownloader.TrackMeta) {
                 binding.trackTitle.text = track.title
-                binding.trackArtist.text = "${track.artist} • ${track.album}"
+                binding.trackArtist.text = "${track.artist} - ${track.album}"
                 binding.badgeQuality.text = if (track.isHiRes) {
                     binding.root.context.getString(R.string.lbl_spotiflac_hires)
                 } else {
                     binding.root.context.getString(R.string.lbl_spotiflac_lossless)
                 }
 
-                if (!track.coverUrl.isNullOrEmpty()) {
-                    binding.trackCover.load(track.coverUrl) {
-                        crossfade(true)
-                        placeholder(R.drawable.ic_playing_indicator_24)
-                        error(R.drawable.ic_playing_indicator_24)
-                    }
-                } else {
-                    binding.trackCover.setImageResource(R.drawable.ic_playing_indicator_24)
-                }
+                // Use placeholder icon; full cover loading can be added later with coil-android
+                binding.trackCover.setImageResource(R.drawable.ic_playing_indicator_24)
 
                 binding.btnDownload.isEnabled = true
                 binding.progressDownload.isVisible = false
@@ -136,7 +128,7 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
 
                         dlResult.onSuccess {
                             binding.progressDownload.isVisible = false
-                            binding.btnDownload.setImageResource(R.drawable.ic_playing_indicator_24)
+                            binding.btnDownload.isEnabled = true
                             Toast.makeText(
                                 binding.root.context,
                                 R.string.lbl_spotiflac_complete,
