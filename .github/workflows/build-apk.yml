@@ -14,15 +14,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install ninja-build
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Install system build dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libutfcpp-dev yasm
 
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Ensure Submodules are Cloned
+      - name: Ensure Submodules and Native Dependencies
         run: |
           if [ ! -d "media/build-logic-settings" ]; then
             rm -rf media
@@ -32,6 +30,9 @@ jobs:
             rm -rf musikr/src/main/cpp/taglib
             mkdir -p musikr/src/main/cpp
             git clone --depth 1 https://github.com/taglib/taglib.git musikr/src/main/cpp/taglib
+          fi
+          if [ ! -d "media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg" ]; then
+            git clone --depth 1 -b release/6.0 https://github.com/FFmpeg/FFmpeg.git media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg
           fi
 
       - name: Set up JDK 21
@@ -45,7 +46,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew app:packageDebug -x :media:lib-decoder-ffmpeg:assembleFfmpeg --stacktrace
+        run: ./gradlew app:packageDebug --stacktrace
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
