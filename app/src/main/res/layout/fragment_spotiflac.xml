@@ -22,10 +22,10 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/lbl_spotiflac_search_hint"
-            app:boxCornerRadiusBottomEnd="@dimen/corner_medium"
-            app:boxCornerRadiusBottomStart="@dimen/corner_medium"
-            app:boxCornerRadiusTopEnd="@dimen/corner_medium"
-            app:boxCornerRadiusTopStart="@dimen/corner_medium"
+            app:boxCornerRadiusBottomEnd="12dp"
+            app:boxCornerRadiusBottomStart="12dp"
+            app:boxCornerRadiusTopEnd="12dp"
+            app:boxCornerRadiusTopStart="12dp"
             app:startIconDrawable="@drawable/ic_search_24">
 
             <com.google.android.material.textfield.TextInputEditText
