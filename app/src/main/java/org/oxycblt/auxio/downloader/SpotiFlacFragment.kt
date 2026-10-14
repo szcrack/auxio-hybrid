@@ -7,6 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -24,6 +26,7 @@ import javax.inject.Inject
 class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
 
     @Inject lateinit var downloader: SpotiFlacDownloader
+    @Inject lateinit var spotifyProvider: SpotifyProvider
     @Inject lateinit var deezerProvider: DeezerProvider
     @Inject lateinit var ccMixterProvider: CcMixterProvider
     @Inject lateinit var archiveProvider: ArchiveProvider
@@ -38,8 +41,9 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
         super.onBindingCreated(binding, savedInstanceState)
 
         try {
-            // Proveedor activo segun preferencia guardada
+            // Proveedor activo inicial
             activeProvider = when (downloader.activeProviderKey) {
+                "spotify" -> spotifyProvider
                 "ccmixter" -> ccMixterProvider
                 "archive" -> archiveProvider
                 else -> deezerProvider
@@ -52,7 +56,6 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
                 adapter = trackAdapter
             }
 
-            // Boton buscar
             binding.btnSearch.setOnClickListener { performSearch(binding) }
 
             binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
@@ -62,19 +65,20 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
                 } else false
             }
 
-            // Chip selector de proveedor
+            // Seleccionar proveedor
             binding.chipProvider.setOnClickListener {
                 showProviderDialog(binding)
             }
 
-            // Boton ARL (solo visible para Deezer)
-            binding.btnArl.setOnClickListener {
-                showArlDialog()
+            // Botón de Cuentas / Credenciales
+            binding.btnAccounts.setOnClickListener {
+                showAccountsDialog(binding)
             }
 
         } catch (e: Throwable) {
             android.util.Log.e("SpotiFlacFragment", "onBindingCreated failed", e)
-            binding.emptyText.text = "Error al inicializar: ${e.localizedMessage}"
+            val msg = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+            binding.emptyText.text = "Error al inicializar: $msg"
             binding.emptyText.isVisible = true
         }
     }
@@ -82,50 +86,115 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
     private fun updateProviderChip(binding: FragmentSpotiflacBinding) {
         val provider = activeProvider ?: deezerProvider
         binding.chipProvider.text = provider.name
-        binding.btnArl.isVisible = (provider is DeezerProvider)
         binding.txtProviderDesc.text = provider.description
     }
 
     private fun showProviderDialog(binding: FragmentSpotiflacBinding) {
         val providers = listOf(
-            "deezer" to "Deezer — 30M canciones (preview gratis, FLAC con cuenta)",
-            "ccmixter" to "ccMixter — Musica Creative Commons libre",
-            "archive" to "Internet Archive — Conciertos live + clasicos FLAC"
+            "deezer" to "Deezer — 30M canciones (Preview gratis / FLAC con cuenta)",
+            "spotify" to "Spotify — Catálogo oficial y Playlists (Requiere credenciales)",
+            "ccmixter" to "ccMixter — Música Creative Commons (Descarga libre)",
+            "archive" to "Internet Archive — Conciertos live + Clásicos FLAC"
         )
         val names = providers.map { it.second }.toTypedArray()
         val currentIdx = providers.indexOfFirst { it.first == downloader.activeProviderKey }.coerceAtLeast(0)
 
         AlertDialog.Builder(requireContext())
-            .setTitle("Seleccionar fuente de musica")
+            .setTitle("Seleccionar fuente musical")
             .setSingleChoiceItems(names, currentIdx) { dialog, which ->
                 val key = providers[which].first
                 downloader.activeProviderKey = key
                 activeProvider = when (key) {
+                    "spotify" -> spotifyProvider
                     "ccmixter" -> ccMixterProvider
                     "archive" -> archiveProvider
                     else -> deezerProvider
                 }
                 updateProviderChip(binding)
                 dialog.dismiss()
-                Toast.makeText(requireContext(), "Fuente: ${activeProvider?.name}", Toast.LENGTH_SHORT).show()
+
+                // Si seleccionó Spotify y no tiene credenciales, invitar a configurarlas
+                if (key == "spotify" && !downloader.hasSpotifyCreds) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Toca 'Cuentas' para agregar tus credenciales de Spotify",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Toast.makeText(requireContext(), "Fuente: ${activeProvider?.name}", Toast.LENGTH_SHORT).show()
+                }
             }
             .setNegativeButton("Cancelar", null)
             .show()
     }
 
-    private fun showArlDialog() {
-        val input = EditText(requireContext()).apply {
-            hint = "Pega tu ARL de Deezer aqui"
+    /**
+     * Diálogo unificado para configurar credenciales de Spotify, Deezer y YouTube.
+     */
+    private fun showAccountsDialog(binding: FragmentSpotiflacBinding) {
+        val ctx = requireContext()
+        val layout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 24)
+        }
+
+        // Spotify Section
+        val lblSpotify = TextView(ctx).apply {
+            text = "Spotify Web API (developer.spotify.com)"
+            textStyle = android.graphics.Typeface.BOLD
+            setPadding(0, 16, 0, 8)
+        }
+        val edtClientId = EditText(ctx).apply {
+            hint = "Spotify Client ID"
+            setText(downloader.spotifyClientId)
+            maxLines = 1
+        }
+        val edtClientSecret = EditText(ctx).apply {
+            hint = "Spotify Client Secret"
+            setText(downloader.spotifyClientSecret)
+            maxLines = 1
+        }
+
+        // Deezer Section
+        val lblDeezer = TextView(ctx).apply {
+            text = "Deezer ARL (Cookie de sesión para FLAC)"
+            textStyle = android.graphics.Typeface.BOLD
+            setPadding(0, 24, 0, 8)
+        }
+        val edtArl = EditText(ctx).apply {
+            hint = "Pega tu cookie ARL de Deezer"
             setText(downloader.deezerArl)
         }
-        AlertDialog.Builder(requireContext())
-            .setTitle("ARL de Deezer Premium")
-            .setMessage("El ARL es una cookie de sesion de tu cuenta Deezer. Con cuenta Premium/HiFi puedes descargar FLAC completo.\n\nSin ARL: preview gratis de 30 segundos.")
-            .setView(input)
+
+        // YouTube Section
+        val lblYt = TextView(ctx).apply {
+            text = "YouTube Data API Key (Opcional)"
+            textStyle = android.graphics.Typeface.BOLD
+            setPadding(0, 24, 0, 8)
+        }
+        val edtYtKey = EditText(ctx).apply {
+            hint = "YouTube API Key (Google Cloud)"
+            setText(downloader.youtubeApiKey)
+        }
+
+        layout.addView(lblSpotify)
+        layout.addView(edtClientId)
+        layout.addView(edtClientSecret)
+        layout.addView(lblDeezer)
+        layout.addView(edtArl)
+        layout.addView(lblYt)
+        layout.addView(edtYtKey)
+
+        AlertDialog.Builder(ctx)
+            .setTitle("Credenciales y Cuentas")
+            .setView(layout)
             .setPositiveButton("Guardar") { _, _ ->
-                downloader.deezerArl = input.text.toString()
-                val msg = if (downloader.hasArl) "ARL guardado. Descargas FLAC activadas." else "ARL borrado. Modo preview."
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
+                downloader.spotifyClientId = edtClientId.text.toString()
+                downloader.spotifyClientSecret = edtClientSecret.text.toString()
+                downloader.deezerArl = edtArl.text.toString()
+                downloader.youtubeApiKey = edtYtKey.text.toString()
+                Toast.makeText(ctx, "Credenciales guardadas con éxito", Toast.LENGTH_SHORT).show()
+                updateProviderChip(binding)
             }
             .setNegativeButton("Cancelar", null)
             .show()
@@ -134,6 +203,13 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
     private fun performSearch(binding: FragmentSpotiflacBinding) {
         val query = binding.searchInput.text?.toString()?.trim() ?: return
         if (query.isEmpty()) return
+
+        // Auto-detección: si pega un link de Spotify, cambiar automáticamente a Spotify
+        if (query.contains("spotify.com/") || query.contains("spotify:")) {
+            activeProvider = spotifyProvider
+            downloader.activeProviderKey = "spotify"
+            updateProviderChip(binding)
+        }
 
         binding.searchProgress.isVisible = true
         binding.emptyText.isVisible = false
@@ -148,40 +224,21 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
 
                 result.onSuccess { tracks ->
                     if (tracks.isEmpty()) {
-                        binding.emptyText.text = getString(R.string.lbl_spotiflac_empty)
+                        binding.emptyText.text = "No se encontraron canciones para '$query'. Prueba con otro término o cambia de fuente."
                         binding.emptyText.isVisible = true
                     } else {
                         binding.recyclerTracks.isVisible = true
                         trackAdapter.submitList(tracks)
-
-                        // Info al usuario segun proveedor
-                        when (provider) {
-                            is DeezerProvider -> if (!downloader.hasArl) {
-                                Toast.makeText(
-                                    requireContext(),
-                                    "Preview 30s. Configura tu ARL Deezer para FLAC completo.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                            is CcMixterProvider -> Toast.makeText(
-                                requireContext(),
-                                "Musica Creative Commons — descarga libre",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            is ArchiveProvider -> Toast.makeText(
-                                requireContext(),
-                                "Internet Archive — puede incluir FLAC completo",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
                     }
                 }.onFailure { err ->
-                    binding.emptyText.text = getString(R.string.lbl_spotiflac_error) + ": ${err.localizedMessage}"
+                    val errorMsg = err.message?.takeIf { it.isNotBlank() } ?: err.javaClass.simpleName
+                    binding.emptyText.text = "Error al buscar: $errorMsg"
                     binding.emptyText.isVisible = true
                 }
             } catch (e: Throwable) {
                 binding.searchProgress.isVisible = false
-                binding.emptyText.text = "Error: ${e.localizedMessage}"
+                val errorMsg = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+                binding.emptyText.text = "Error de red: $errorMsg"
                 binding.emptyText.isVisible = true
                 android.util.Log.e("SpotiFlacFragment", "performSearch error", e)
             }
@@ -208,10 +265,11 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
         inner class ViewHolder(private val b: ItemSpotiflacTrackBinding) : RecyclerView.ViewHolder(b.root) {
             fun bind(track: SpotiFlacDownloader.TrackMeta) {
                 b.trackTitle.text = track.title
-                b.trackArtist.text = "${track.artist} - ${track.album}"
+                b.trackArtist.text = "${track.artist} • ${track.album}"
 
                 val badge = when {
-                    track.isFreeDownload && track.isHiRes -> getString(R.string.lbl_spotiflac_hires)
+                    track.provider == "Spotify" -> "Spotify"
+                    track.isFreeDownload && track.isHiRes -> "FLAC Libre"
                     track.isFreeDownload -> "CC Libre"
                     track.isHiRes -> getString(R.string.lbl_spotiflac_hires)
                     else -> getString(R.string.lbl_spotiflac_lossless)
@@ -238,7 +296,8 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
                         result.onSuccess {
                             Toast.makeText(b.root.context, R.string.lbl_spotiflac_complete, Toast.LENGTH_LONG).show()
                         }.onFailure { err ->
-                            Toast.makeText(b.root.context, "Error: ${err.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            val msg = err.message?.takeIf { it.isNotBlank() } ?: err.javaClass.simpleName
+                            Toast.makeText(b.root.context, "Error: $msg", Toast.LENGTH_LONG).show()
                         }
                     }
                 }
