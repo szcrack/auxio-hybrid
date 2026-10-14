@@ -32,6 +32,9 @@ jobs:
             mkdir -p musikr/src/main/cpp
             git clone --depth 1 https://github.com/taglib/taglib.git musikr/src/main/cpp/taglib
           fi
+          if [ ! -f "musikr/src/main/cpp/taglib/3rdparty/utfcpp/CMakeLists.txt" ]; then
+            git clone --depth 1 https://github.com/nemtrif/utfcpp.git musikr/src/main/cpp/taglib/3rdparty/utfcpp
+          fi
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
