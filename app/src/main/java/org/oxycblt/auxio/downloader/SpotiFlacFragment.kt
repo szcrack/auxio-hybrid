@@ -31,22 +31,26 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
     override fun onBindingCreated(binding: FragmentSpotiflacBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
 
-        binding.recyclerTracks.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-            adapter = trackAdapter
-        }
-
-        binding.btnSearch.setOnClickListener {
-            performSearch(binding)
-        }
-
-        binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                performSearch(binding)
-                true
-            } else {
-                false
+        try {
+            binding.recyclerTracks.apply {
+                layoutManager = LinearLayoutManager(requireContext())
+                adapter = trackAdapter
             }
+            binding.btnSearch.setOnClickListener {
+                performSearch(binding)
+            }
+            binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                    performSearch(binding)
+                    true
+                } else {
+                    false
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("SpotiFlacFragment", "onBindingCreated failed", e)
+            binding.emptyText.text = "Error al inicializar: ${e.localizedMessage}"
+            binding.emptyText.isVisible = true
         }
     }
 
