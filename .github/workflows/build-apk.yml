@@ -15,24 +15,22 @@ jobs:
 
     steps:
       - name: Install system build dependencies
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libutfcpp-dev yasm
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libutfcpp-dev
 
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Ensure Submodules and Native Dependencies
+      - name: Ensure Submodules
         run: |
           if [ ! -d "media/build-logic-settings" ]; then
             rm -rf media
             git clone --depth 1 -b release https://github.com/OxygenCobalt/media.git media
           fi
+          sed -i 's/"Media3 FFmpeg decoder module",/"Media3 FFmpeg decoder module",\n          includeInCompositeBuild = false,/g' media/build-logic-settings/src/main/kotlin/androidx/media3/buildlogic/Media3Modules.kt
           if [ ! -f "musikr/src/main/cpp/taglib/CMakeLists.txt" ]; then
             rm -rf musikr/src/main/cpp/taglib
             mkdir -p musikr/src/main/cpp
             git clone --depth 1 https://github.com/taglib/taglib.git musikr/src/main/cpp/taglib
-          fi
-          if [ ! -d "media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg" ]; then
-            git clone --depth 1 -b release/6.0 https://github.com/FFmpeg/FFmpeg.git media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg
           fi
 
       - name: Set up JDK 21
@@ -46,7 +44,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew app:packageDebug --stacktrace
+        run: ./gradlew :app:assembleDebug --stacktrace
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
