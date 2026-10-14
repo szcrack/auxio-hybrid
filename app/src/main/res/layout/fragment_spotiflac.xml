@@ -52,7 +52,7 @@
             android:layout_height="wrap_content"
             android:text="Cuentas"
             android:textSize="12sp"
-            app:icon="@drawable/ic_settings_24"
+            app:icon="@drawable/ic_config_24"
             app:iconSize="16dp"
             style="@style/Widget.Material3.Button.TonalButton"/>
     </LinearLayout>
