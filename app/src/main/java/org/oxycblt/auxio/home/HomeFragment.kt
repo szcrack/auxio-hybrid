@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.home
 
 import android.annotation.SuppressLint
+import android.view.View
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -143,6 +144,10 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                         binding.homeNormalToolbar.menu.findItem(R.id.action_sort)?.isVisible = isLibraryTab
                         if (isLibraryTab) {
                             homeModel.synchronizeTabPosition(position)
+                        } else {
+                            // Hybrid tab: disable liftOnScroll to avoid crash in
+                            // CoordinatorAppBarLayout.findScrollingChild()
+                            binding.homeAppbar.liftOnScrollTargetViewId = View.NO_ID
                         }
                     }
                 }
