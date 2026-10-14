@@ -62,23 +62,36 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
         binding.emptyText.isVisible = false
 
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = downloader.searchAndResolve(query)
-            binding.searchProgress.isVisible = false
+            try {
+                val result = downloader.searchAndResolve(query)
+                binding.searchProgress.isVisible = false
 
-            result.onSuccess { tracks ->
-                if (tracks.isEmpty()) {
-                    binding.emptyText.text = getString(R.string.lbl_spotiflac_empty)
+                result.onSuccess { tracks ->
+                    if (tracks.isEmpty()) {
+                        binding.emptyText.text = getString(R.string.lbl_spotiflac_empty)
+                        binding.emptyText.isVisible = true
+                        binding.recyclerTracks.isVisible = false
+                    } else {
+                        binding.emptyText.isVisible = false
+                        binding.recyclerTracks.isVisible = true
+                        trackAdapter.submitList(tracks)
+                        if (!downloader.hasArl) {
+                            Toast.makeText(
+                                requireContext(),
+                                "Modo demo: preview 30s. Ingresa tu ARL de Deezer para FLAC completo.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }.onFailure { err ->
+                    binding.emptyText.text = getString(R.string.lbl_spotiflac_error) + ": ${err.localizedMessage}"
                     binding.emptyText.isVisible = true
                     binding.recyclerTracks.isVisible = false
-                } else {
-                    binding.emptyText.isVisible = false
-                    binding.recyclerTracks.isVisible = true
-                    trackAdapter.submitList(tracks)
                 }
-            }.onFailure { err ->
-                binding.emptyText.text = getString(R.string.lbl_spotiflac_error) + ": ${err.localizedMessage}"
+            } catch (e: Throwable) {
+                binding.searchProgress.isVisible = false
+                binding.emptyText.text = "Error: ${e.localizedMessage}"
                 binding.emptyText.isVisible = true
-                binding.recyclerTracks.isVisible = false
             }
         }
     }
