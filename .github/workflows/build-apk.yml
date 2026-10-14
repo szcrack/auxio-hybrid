@@ -22,6 +22,18 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Ensure Submodules are Cloned
+        run: |
+          if [ ! -d "media/build-logic-settings" ]; then
+            rm -rf media
+            git clone --depth 1 -b release https://github.com/OxygenCobalt/media.git media
+          fi
+          if [ ! -f "musikr/src/main/cpp/taglib/CMakeLists.txt" ]; then
+            rm -rf musikr/src/main/cpp/taglib
+            mkdir -p musikr/src/main/cpp
+            git clone --depth 1 https://github.com/taglib/taglib.git musikr/src/main/cpp/taglib
+          fi
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
