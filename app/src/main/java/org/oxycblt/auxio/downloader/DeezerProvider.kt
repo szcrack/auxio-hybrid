@@ -3,6 +3,8 @@ package org.oxycblt.auxio.downloader
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.oxycblt.auxio.R
 import java.net.HttpURLConnection
@@ -14,8 +16,7 @@ import javax.inject.Singleton
 /**
  * Proveedor Deezer:
  * - Busqueda gratuita sin autenticacion via API publica de Deezer.
- * - Preview 30s MP3 gratis para todos.
- * - Descarga FLAC completa con ARL de Deezer Premium (opcional).
+ * - Siempre se ejecuta en Dispatchers.IO para evitar NetworkOnMainThreadException.
  */
 @Singleton
 class DeezerProvider @Inject constructor(
@@ -33,8 +34,8 @@ class DeezerProvider @Inject constructor(
         private const val UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
     }
 
-    override suspend fun search(query: String): Result<List<SpotiFlacDownloader.TrackMeta>> {
-        return try {
+    override suspend fun search(query: String): Result<List<SpotiFlacDownloader.TrackMeta>> = withContext(Dispatchers.IO) {
+        try {
             val encoded = URLEncoder.encode(query.trim(), "UTF-8")
             val url = URL("$API/search?q=$encoded&limit=25&output=json")
             val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -45,7 +46,7 @@ class DeezerProvider @Inject constructor(
                 readTimeout = 12000
             }
             if (conn.responseCode != 200) {
-                return Result.failure(Exception("Deezer respondio HTTP ${conn.responseCode}"))
+                return@withContext Result.failure(Exception("Deezer respondio HTTP ${conn.responseCode}"))
             }
 
             val rawJson = conn.inputStream.bufferedReader().readText()
@@ -54,10 +55,10 @@ class DeezerProvider @Inject constructor(
             if (json.has("error")) {
                 val errObj = json.optJSONObject("error")
                 val errMsg = errObj?.optString("message", "Error en la API de Deezer") ?: "Error en Deezer"
-                return Result.failure(Exception(errMsg))
+                return@withContext Result.failure(Exception(errMsg))
             }
 
-            val items = json.optJSONArray("data") ?: return Result.success(emptyList())
+            val items = json.optJSONArray("data") ?: return@withContext Result.success(emptyList())
 
             val list = mutableListOf<SpotiFlacDownloader.TrackMeta>()
             for (i in 0 until items.length()) {
