@@ -48,6 +48,9 @@ class UsbDacManager @Inject constructor(
     var isDacConnected: Boolean = false
         private set
 
+    val isBitPerfectActive: Boolean
+        get() = isDacConnected && nativeHandle != 0L
+
     var currentDeviceName: String? = null
         private set
 
@@ -354,16 +357,9 @@ class UsbDacManager @Inject constructor(
     }
 
     fun setHardwareVolume(volume: Int): Boolean {
+        if (nativeHandle == 0L) return false
         return try {
-            if (nativeHandle != 0L) {
-                NativeBridge.nativeSetVolume(nativeHandle, volume)
-            } else {
-                // Fallback a AudioManager para controlar el volumen del DAC / audífonos USB conectados
-                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                val targetVol = (volume * maxVol) / 100
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
-                true
-            }
+            NativeBridge.nativeSetVolume(nativeHandle, volume)
         } catch (e: Throwable) {
             Log.e(TAG, "setHardwareVolume fallo", e)
             false
