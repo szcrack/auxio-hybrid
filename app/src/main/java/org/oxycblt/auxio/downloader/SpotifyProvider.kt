@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Base64
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.oxycblt.auxio.R
 import java.io.OutputStreamWriter
@@ -13,11 +15,6 @@ import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Proveedor Spotify Web API:
- * - Permite buscar en el catalogo oficial de Spotify usando Client ID y Client Secret gratuitos.
- * - Permite importar playlists publicas o de la cuenta pegando el link o ID de la playlist.
- */
 @Singleton
 class SpotifyProvider @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -25,7 +22,7 @@ class SpotifyProvider @Inject constructor(
 ) : MusicProvider {
 
     override val name = "Spotify"
-    override val description = "Catalogo oficial y playlists de Spotify | Requiere credenciales gratis"
+    override val description = "Catálogo oficial y playlists de Spotify | Requiere credenciales gratis"
     override val iconRes = R.drawable.ic_song_24
     override val requiresConfig = true
 
@@ -39,25 +36,21 @@ class SpotifyProvider @Inject constructor(
     private var cachedToken: String? = null
     private var tokenExpiryTime: Long = 0L
 
-    /**
-     * Obtiene el token de acceso de Spotify usando Client Credentials Flow.
-     */
-    private suspend fun getAccessToken(): Result<String> {
+    private suspend fun getAccessToken(): Result<String> = withContext(Dispatchers.IO) {
         val clientId = downloader.spotifyClientId.trim()
         val clientSecret = downloader.spotifyClientSecret.trim()
 
         if (clientId.isEmpty() || clientSecret.isEmpty()) {
-            return Result.failure(
-                Exception("Faltan credenciales de Spotify. Toca 'Configurar' para ingresar tu Client ID y Client Secret de developer.spotify.com")
+            return@withContext Result.failure(
+                Exception("Faltan credenciales de Spotify. Toca 'Cuentas' para ingresar tu Client ID y Client Secret.")
             )
         }
 
-        // Si tenemos un token valido en cache, reutilizarlo
         if (cachedToken != null && System.currentTimeMillis() < tokenExpiryTime) {
-            return Result.success(cachedToken!!)
+            return@withContext Result.success(cachedToken!!)
         }
 
-        return try {
+        try {
             val url = URL(TOKEN_URL)
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -74,7 +67,7 @@ class SpotifyProvider @Inject constructor(
 
             if (conn.responseCode != 200) {
                 val errText = conn.errorStream?.bufferedReader()?.readText() ?: "HTTP ${conn.responseCode}"
-                return Result.failure(Exception("Error al autenticar con Spotify ($errText)"))
+                return@withContext Result.failure(Exception("Error de autenticación con Spotify ($errText)"))
             }
 
             val resp = conn.inputStream.bufferedReader().readText()
@@ -88,46 +81,45 @@ class SpotifyProvider @Inject constructor(
             Result.success(token)
         } catch (e: Exception) {
             Log.e(TAG, "Error obteniendo token de Spotify", e)
-            Result.failure(Exception(e.message ?: "Fallo de conexion con Spotify"))
+            Result.failure(Exception(e.message ?: "Fallo de conexión con Spotify"))
         }
     }
 
-    override suspend fun search(query: String): Result<List<SpotiFlacDownloader.TrackMeta>> {
+    override suspend fun search(query: String): Result<List<SpotiFlacDownloader.TrackMeta>> = withContext(Dispatchers.IO) {
         val trimmed = query.trim()
 
-        // Detectar si el usuario pego un link de Playlist de Spotify
         if (trimmed.contains("spotify.com/playlist/") || trimmed.contains("spotify:playlist:")) {
             val playlistId = extractPlaylistId(trimmed)
             if (playlistId.isNotEmpty()) {
-                return loadPlaylistTracks(playlistId)
+                return@withContext loadPlaylistTracks(playlistId)
             }
         }
 
         val tokenResult = getAccessToken()
         if (tokenResult.isFailure) {
-            return Result.failure(tokenResult.exceptionOrNull()!!)
+            return@withContext Result.failure(tokenResult.exceptionOrNull()!!)
         }
         val token = tokenResult.getOrThrow()
 
-        return try {
+        try {
             val encoded = URLEncoder.encode(trimmed, "UTF-8")
             val url = URL("$SEARCH_URL?q=$encoded&type=track&limit=25")
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("Authorization", "Bearer $token")
-                setRequestProperty("User-Agent", "RealPlayerMusic/1.0")
+                setRequestProperty("User-Agent", "RVPLAYER/1.0")
                 connectTimeout = 10000
                 readTimeout = 10000
             }
 
             if (conn.responseCode != 200) {
                 val errText = conn.errorStream?.bufferedReader()?.readText() ?: "HTTP ${conn.responseCode}"
-                return Result.failure(Exception("Spotify respondio error: $errText"))
+                return@withContext Result.failure(Exception("Spotify error: $errText"))
             }
 
             val json = JSONObject(conn.inputStream.bufferedReader().readText())
             val tracksObj = json.optJSONObject("tracks")
-            val items = tracksObj?.optJSONArray("items") ?: return Result.success(emptyList())
+            val items = tracksObj?.optJSONArray("items") ?: return@withContext Result.success(emptyList())
 
             val list = mutableListOf<SpotiFlacDownloader.TrackMeta>()
             for (i in 0 until items.length()) {
@@ -169,15 +161,12 @@ class SpotifyProvider @Inject constructor(
         }
     }
 
-    /**
-     * Carga todas las canciones de una playlist de Spotify.
-     */
-    private suspend fun loadPlaylistTracks(playlistId: String): Result<List<SpotiFlacDownloader.TrackMeta>> {
+    private suspend fun loadPlaylistTracks(playlistId: String): Result<List<SpotiFlacDownloader.TrackMeta>> = withContext(Dispatchers.IO) {
         val tokenResult = getAccessToken()
-        if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
+        if (tokenResult.isFailure) return@withContext Result.failure(tokenResult.exceptionOrNull()!!)
         val token = tokenResult.getOrThrow()
 
-        return try {
+        try {
             val url = URL("$PLAYLIST_URL/$playlistId/tracks?limit=50")
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
@@ -187,11 +176,11 @@ class SpotifyProvider @Inject constructor(
             }
 
             if (conn.responseCode != 200) {
-                return Result.failure(Exception("No se pudo cargar la playlist (HTTP ${conn.responseCode}). Asegurate de que sea publica."))
+                return@withContext Result.failure(Exception("No se pudo cargar la playlist (HTTP ${conn.responseCode}). Asegúrate de que sea pública."))
             }
 
             val json = JSONObject(conn.inputStream.bufferedReader().readText())
-            val items = json.optJSONArray("items") ?: return Result.success(emptyList())
+            val items = json.optJSONArray("items") ?: return@withContext Result.success(emptyList())
 
             val list = mutableListOf<SpotiFlacDownloader.TrackMeta>()
             for (i in 0 until items.length()) {
