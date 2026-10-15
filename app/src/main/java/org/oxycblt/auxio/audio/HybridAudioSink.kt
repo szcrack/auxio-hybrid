@@ -10,9 +10,13 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import java.nio.ByteBuffer
 
 /**
- * Hybrid AudioSink that dynamically routes decoded PCM audio:
- * - If USB DAC is connected: Routes directly to TrueSample bit-perfect native UAC2 driver.
- * - If no DAC is connected: Routes cleanly to Android's DefaultAudioSink (speakers, 3.5mm, bluetooth).
+ * Hybrid AudioSink que conmuta limpiamente entre el driver nativo UAC2 Bit-Perfect
+ * y el DefaultAudioSink del sistema Android (ExoPlayer).
+ *
+ * REGLA FUNDAMENTAL:
+ * Solo conmuta al driver nativo si este esta activamente abierto y aceptando PCM (nativeHandle != 0L).
+ * En cualquier otro caso (audifonos USB normales, parlantes, bluetooth, jack 3.5mm),
+ * el audio fluye por DefaultAudioSink para garantizar que NUNCA se corte el sonido ni se congele ExoPlayer.
  */
 class HybridAudioSink(
     private val usbDacManager: UsbDacManager,
@@ -20,30 +24,31 @@ class HybridAudioSink(
 ) : AudioSink {
 
     private var currentFormat: Format? = null
-    private var isUsingDac: Boolean = false
+
+    /** Indica si actualmente se esta usando el driver nativo de bajo nivel */
+    private val isUsingBitPerfectDac: Boolean
+        get() = usbDacManager.isBitPerfectActive
 
     override fun setListener(listener: AudioSink.Listener) {
         defaultSink.setListener(listener)
     }
 
     override fun supportsFormat(format: Format): Boolean {
-        if (usbDacManager.isDacConnected) {
+        if (isUsingBitPerfectDac) {
             return format.sampleMimeType == null || format.sampleMimeType == "audio/raw"
         }
         return defaultSink.supportsFormat(format)
     }
 
     override fun getFormatSupport(format: Format): Int {
-        if (usbDacManager.isDacConnected) {
+        if (isUsingBitPerfectDac) {
             return AudioSink.SINK_FORMAT_SUPPORTED_DIRECTLY
         }
         return defaultSink.getFormatSupport(format)
     }
 
     override fun getCurrentPositionUs(sourceEnded: Boolean): Long {
-        if (isUsingDac) {
-            return C.TIME_UNSET
-        }
+        // Siempre delegar a defaultSink para mantener la barra de progreso de ExoPlayer perfectamente sincronizada
         return defaultSink.getCurrentPositionUs(sourceEnded)
     }
 
@@ -53,8 +58,10 @@ class HybridAudioSink(
         outputChannels: IntArray?
     ) {
         currentFormat = inputFormat
-        if (usbDacManager.isDacConnected) {
-            isUsingDac = true
+        // Siempre configurar defaultSink para que este listo inmediatamente si se desconecta o conecta un dispositivo
+        defaultSink.configure(inputFormat, specifiedBufferSize, outputChannels)
+
+        if (isUsingBitPerfectDac) {
             val sampleRate = if (inputFormat.sampleRate != Format.NO_VALUE) inputFormat.sampleRate else 44100
             val channelCount = if (inputFormat.channelCount != Format.NO_VALUE) inputFormat.channelCount else 2
             val bitDepth = when (inputFormat.pcmEncoding) {
@@ -63,22 +70,15 @@ class HybridAudioSink(
                 else -> 16
             }
             usbDacManager.startPlayback(sampleRate, bitDepth, channelCount)
-        } else {
-            isUsingDac = false
-            defaultSink.configure(inputFormat, specifiedBufferSize, outputChannels)
         }
     }
 
     override fun play() {
-        if (!isUsingDac) {
-            defaultSink.play()
-        }
+        defaultSink.play()
     }
 
     override fun handleDiscontinuity() {
-        if (!isUsingDac) {
-            defaultSink.handleDiscontinuity()
-        }
+        defaultSink.handleDiscontinuity()
     }
 
     override fun handleBuffer(
@@ -86,48 +86,32 @@ class HybridAudioSink(
         presentationTimeUs: Long,
         encodedAccessUnitCount: Int
     ): Boolean {
-        if (usbDacManager.isDacConnected) {
-            isUsingDac = true
+        if (isUsingBitPerfectDac) {
             val remaining = buffer.remaining()
             if (remaining > 0) {
                 val written = usbDacManager.writePcmBuffer(buffer, remaining)
                 if (written > 0) {
                     buffer.position(buffer.position() + written)
+                    return !buffer.hasRemaining()
                 }
             }
-            return !buffer.hasRemaining()
-        } else {
-            if (isUsingDac) {
-                // DAC disconnected mid-playback; fallback to default sink
-                isUsingDac = false
-                currentFormat?.let { format ->
-                    defaultSink.configure(format, 0, null)
-                    defaultSink.play()
-                }
-            }
-            return defaultSink.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+            // Si el driver nativo no pudo escribir, no congelar el reproductor: pasar por defaultSink
         }
+        return defaultSink.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
     }
 
     override fun playToEndOfStream() {
-        if (isUsingDac) {
+        if (isUsingBitPerfectDac) {
             usbDacManager.stopPlayback()
-        } else {
-            defaultSink.playToEndOfStream()
         }
+        defaultSink.playToEndOfStream()
     }
 
     override fun isEnded(): Boolean {
-        if (isUsingDac) {
-            return true
-        }
         return defaultSink.isEnded
     }
 
     override fun hasPendingData(): Boolean {
-        if (isUsingDac) {
-            return false
-        }
         return defaultSink.hasPendingData()
     }
 
@@ -176,7 +160,7 @@ class HybridAudioSink(
     }
 
     override fun setVolume(volume: Float) {
-        if (isUsingDac) {
+        if (isUsingBitPerfectDac) {
             val hwVol = (volume * 100).toInt().coerceIn(0, 100)
             usbDacManager.setHardwareVolume(hwVol)
         }
@@ -184,23 +168,21 @@ class HybridAudioSink(
     }
 
     override fun pause() {
-        if (isUsingDac) {
+        if (isUsingBitPerfectDac) {
             usbDacManager.stopPlayback()
-        } else {
-            defaultSink.pause()
         }
+        defaultSink.pause()
     }
 
     override fun flush() {
-        if (isUsingDac) {
+        if (isUsingBitPerfectDac) {
             usbDacManager.stopPlayback()
-        } else {
-            defaultSink.flush()
         }
+        defaultSink.flush()
     }
 
     override fun reset() {
-        if (isUsingDac) {
+        if (isUsingBitPerfectDac) {
             usbDacManager.closeDac()
         }
         defaultSink.reset()
