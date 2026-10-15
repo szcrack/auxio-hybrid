@@ -141,7 +141,7 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
         // Spotify Section
         val lblSpotify = TextView(ctx).apply {
             text = "Spotify Web API (developer.spotify.com)"
-            textStyle = android.graphics.Typeface.BOLD
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, 16, 0, 8)
         }
         val edtClientId = EditText(ctx).apply {
@@ -158,7 +158,7 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
         // Deezer Section
         val lblDeezer = TextView(ctx).apply {
             text = "Deezer ARL (Cookie de sesión para FLAC)"
-            textStyle = android.graphics.Typeface.BOLD
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, 24, 0, 8)
         }
         val edtArl = EditText(ctx).apply {
@@ -169,7 +169,7 @@ class SpotiFlacFragment : ViewBindingFragment<FragmentSpotiflacBinding>() {
         // YouTube Section
         val lblYt = TextView(ctx).apply {
             text = "YouTube Data API Key (Opcional)"
-            textStyle = android.graphics.Typeface.BOLD
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, 24, 0, 8)
         }
         val edtYtKey = EditText(ctx).apply {
